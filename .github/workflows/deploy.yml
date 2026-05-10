@@ -1,0 +1,46 @@
+name: CI/CD Frontend
+
+on:
+  push:
+    branches:
+      - deploy
+
+jobs:
+  build-push-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v3
+
+      - name: Login a Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build y Push imagen
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: nesteco/frontend:latest
+
+      - name: Deploy en EC2
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            docker pull nesteco/frontend:latest &&
+            docker stop proyecto_frontend || true &&
+            docker rm proyecto_frontend || true &&
+            docker run -d \
+              --name proyecto_frontend \
+              -p 5000:5000 \
+              -e PORT=5000 \
+              -e DEBUG=False \
+              -e BACKEND_URL=http://${{ secrets.EC2_BACKEND_HOST }}:3000 \
+              -e SECRET_KEY=${{ secrets.SECRET_KEY }} \
+              nesteco/frontend:latest
